@@ -107,6 +107,12 @@ def fetch(args):
             #
             # If we don't find any, set UIDNEXT so that we know that we only
             # care about new mail.
+            #
+            # Use the UID search key so that we constrain the search only to
+            # messages which we haven't fetched yet. Without this, we can
+            # perform a potentially very expensive search only to find that we 
+            # don't need to fetch much. This also means that we can avoid
+            # culling already-seen UIDs manually.
             typ, uids = ic.uid('search', 'UID', f'{meta_obj["UIDFETCHNEXT"]}:*', 'LARGER', str(1024 * 1024))
             assert typ == 'OK'
             uids = uids[0].decode('utf-8')
@@ -121,9 +127,6 @@ def fetch(args):
                 meta_obj['UIDFETCHNEXT'] = uidnext
                 write_metafile(folder_meta_path, meta_obj)
                 continue
-
-            # Strip UIDs that we've alrady fetched
-            uids = [u for u in uids if u >= meta_obj['UIDFETCHNEXT']]
 
             # Fetch all of the messages and keep UIDFETCHNEXT up to date
             for index, uid in enumerate(uids):
