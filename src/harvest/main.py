@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+from flask import Flask
 import getpass
 import imaplib
 import logging
@@ -8,6 +9,10 @@ import os.path
 import re
 import sys
 from tempfile import mkstemp
+
+
+def folder_name_path(fn):
+    return os.path.join('.', re.sub(r'[/\[\]\*]', '_', fn))
 
 
 def read_metafile(fp):
@@ -73,7 +78,7 @@ def fetch(args):
 
             logging.info(f'Beginning crawl of {folder_name}')
 
-            folder_path = os.path.join('.', re.sub(r'[/\[\]\*]', '_', folder_name))
+            folder_path = folder_name_path(folder_name)
             folder_meta_path = os.path.join(folder_path, 'meta.json')
             meta_obj = read_metafile(folder_meta_path)
 
@@ -93,6 +98,10 @@ def fetch(args):
                 'UIDVALIDITY changed on existing mail directory!'
 
             meta_obj['UIDVALIDITY'] = uidvalidity
+
+            if 'NAME' not in meta_obj:
+                meta_obj['NAME'] = folder_name
+                write_metafile(folder_meta_path, meta_obj)
 
             if meta_obj['UIDFETCHNEXT'] >= uidnext:
                 logging.info('No new messages in folder; skipping')
@@ -155,6 +164,53 @@ def fetch(args):
             ic.unselect()
 
 
+def web(args):
+    app = Flask('harvest')
+
+    @app.route("/")
+    def hello_world():
+        folders = []
+
+        for fn in os.listdir('.'):
+            if not os.path.isdir(fn):
+                continue
+
+            meta_obj = read_metafile(os.path.join(fn, 'meta.json'))
+
+            folders += [meta_obj['NAME']]
+
+        out = '<ul>\n';
+        for fn in sorted(folders):
+            out += f'  <li><a href="/{fn}">{fn}</a></li>'
+        out += '</ul>'
+
+        return out
+
+    @app.route("/<path:folder>/")
+    def folder(folder):
+        fp = folder_name_path(folder)
+
+        uids = []
+        for fn in os.listdir(fp):
+            if not os.path.isdir(os.path.join(fp, fn)):
+                continue
+
+            uids += [int(fn)]
+
+        out = '<ul>'
+        for u in sorted(uids):
+            out += f'  <li><a href="/{folder}/{u}">{u}</a></li>'
+        out += '</ul>'
+
+        return out
+
+    @app.route("/<path:folder>/<int:uid>")
+    def uid(folder, uid):
+        return f'<p>Displaying message {uid} in folder {folder}</p>'
+
+    app.run()
+
+
 def main():
     ap = ArgumentParser(description='''
 Free up space on an email account by downloading attachments and deleting
@@ -174,6 +230,8 @@ messages.
     fetch_ap.add_argument(
         'server', help='mail server to login to')
 
+    web_ap = sp.add_parser('web', help='run webserver')
+
     args = ap.parse_args()
 
     logging.basicConfig(
@@ -182,3 +240,5 @@ messages.
 
     if args.subcommand == 'fetch':
         fetch(args)
+    elif args.subcommand == 'web':
+        web(args)
