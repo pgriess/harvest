@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
-from flask import Flask
+import email.parser
+from flask import Flask, make_response, request
 import getpass
 import imaplib
 import logging
@@ -10,6 +11,26 @@ import re
 import sys
 from tempfile import mkstemp
 from urllib.parse import quote_plus, unquote_plus
+
+
+def get_attachment_parts_and_paths(m, mime_prefix=None):
+    attachments = {}
+    for i, p in enumerate(m.get_payload()):
+        if mime_prefix is None:
+            mime_path = str(i + 1)
+        else:
+            mime_path = f'{mime_prefix}.{i + 1}'
+
+        if not p.is_multipart():
+            if p.get_content_disposition() == 'attachment' or \
+                    p.get_filename():
+                attachments[mime_path] = p
+
+            continue
+
+        attachments.update(get_attachment_parts_and_paths(p, mime_path))
+
+    return attachments
 
 
 def folder_name_path(fn):
@@ -209,7 +230,48 @@ def web(args):
     @app.route("/<path:folder>/<int:uid>")
     def uid(folder, uid):
         folder = unquote_plus(folder)
-        return f'<p>Displaying message {uid} in folder {folder}</p>'
+
+        p = email.parser.BytesParser()
+        fp = os.path.join(args.directory, folder_name_path(folder), str(uid), 'rfc822')
+        with open(fp, 'rb') as f:
+            m = p.parse(f)
+
+        out = ''
+        out += f'Date: {m["Date"]} <br/>'
+        out += f'From: {m["From"]} <br/>'
+        out += f'Subject: {m["Subject"]} <br/>'
+
+        for path, p in get_attachment_parts_and_paths(m).items():
+            if p.get_content_maintype() == 'image':
+                out += f'<a href="/{quote_plus(folder)}/{uid}/{path}?disposition=attachment"><img src="/{quote_plus(folder)}/{uid}/{path}"/>{p.get_filename()}</a>'
+            else:
+                out += f'<a href="/{quote_plus(folder)}/{uid}/{path}?disposition=attachment">{p.get_filename()}</a>'
+
+        return out
+
+    @app.route("/<path:folder>/<int:uid>/<path>")
+    def mime_part(folder, uid, path):
+        folder = unquote_plus(folder)
+
+        p = email.parser.BytesParser()
+        fp = os.path.join(args.directory, folder_name_path(folder), str(uid), 'rfc822')
+        with open(fp, 'rb') as f:
+            m = p.parse(f)
+
+        parts = get_attachment_parts_and_paths(m)
+        p = parts[path]
+
+        resp = make_response(p.get_payload(decode=True), 200)
+
+        resp.headers['Content-Type'] = p.get_content_type()
+        if request.args.get('disposition') == 'attachment':
+            resp.headers['Content-Disposition'] = 'attachment'
+
+            if p.get_filename():
+                resp.headers['Content-Disposition'] += f'; filename="{p.get_filename()}"'
+
+        print(f'{resp.headers}')
+        return resp
 
     app.run(debug=True)
 
