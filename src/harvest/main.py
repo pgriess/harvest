@@ -9,6 +9,7 @@ import os.path
 import re
 import sys
 from tempfile import mkstemp
+from urllib.parse import quote_plus, unquote_plus
 
 
 def folder_name_path(fn):
@@ -181,13 +182,14 @@ def web(args):
 
         out = '<ul>\n';
         for fn in sorted(folders):
-            out += f'  <li><a href="/{fn}">{fn}</a></li>'
+            out += f'  <li><a href="/{quote_plus(fn)}">{fn}</a></li>'
         out += '</ul>'
 
         return out
 
     @app.route("/<path:folder>/")
     def folder(folder):
+        folder = unquote_plus(folder)
         fp = os.path.join(args.directory, folder_name_path(folder))
 
         uids = []
@@ -206,6 +208,7 @@ def web(args):
 
     @app.route("/<path:folder>/<int:uid>")
     def uid(folder, uid):
+        folder = unquote_plus(folder)
         return f'<p>Displaying message {uid} in folder {folder}</p>'
 
     app.run(debug=True)
