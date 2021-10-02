@@ -78,7 +78,7 @@ def fetch(args):
 
             logging.info(f'Beginning crawl of {folder_name}')
 
-            folder_path = folder_name_path(folder_name)
+            folder_path = os.path.join(args.directory, folder_name_path(folder_name))
             folder_meta_path = os.path.join(folder_path, 'meta.json')
             meta_obj = read_metafile(folder_meta_path)
 
@@ -171,11 +171,11 @@ def web(args):
     def hello_world():
         folders = []
 
-        for fn in os.listdir('.'):
-            if not os.path.isdir(fn):
+        for fn in os.listdir(args.directory):
+            if not os.path.isdir(os.path.join(args.directory, fn)):
                 continue
 
-            meta_obj = read_metafile(os.path.join(fn, 'meta.json'))
+            meta_obj = read_metafile(os.path.join(args.directory, fn, 'meta.json'))
 
             folders += [meta_obj['NAME']]
 
@@ -188,7 +188,7 @@ def web(args):
 
     @app.route("/<path:folder>/")
     def folder(folder):
-        fp = folder_name_path(folder)
+        fp = os.path.join(args.directory, folder_name_path(folder))
 
         uids = []
         for fn in os.listdir(fp):
@@ -216,6 +216,9 @@ def main():
 Free up space on an email account by downloading attachments and deleting
 messages.
 ''')
+    ap.add_argument(
+        '-d', dest='directory', default='.',
+        help='use the given directory as the mail store; default .')
     ap.add_argument(
         '-v', dest='verbosity', action='count', default=0,
         help='increase logging verbosity; can be used multiple times')
