@@ -208,7 +208,7 @@ def web(args):
     def uid(folder, uid):
         return f'<p>Displaying message {uid} in folder {folder}</p>'
 
-    app.run()
+    app.run(debug=True)
 
 
 def main():
