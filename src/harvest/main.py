@@ -241,11 +241,13 @@ def web(args):
         out += f'From: {m["From"]} <br/>'
         out += f'Subject: {m["Subject"]} <br/>'
 
+        out += '<div style="display: flex">'
         for path, p in get_attachment_parts_and_paths(m).items():
             if p.get_content_maintype() == 'image':
-                out += f'<a href="/{quote_plus(folder)}/{uid}/{path}?disposition=attachment"><img src="/{quote_plus(folder)}/{uid}/{path}"/>{p.get_filename()}</a>'
+                out += f'<a href="/{quote_plus(folder)}/{uid}/{path}?disposition=attachment"><img src="/{quote_plus(folder)}/{uid}/{path}" style="width: 300px;"/><br/>{p.get_filename()}</a>'
             else:
                 out += f'<a href="/{quote_plus(folder)}/{uid}/{path}?disposition=attachment">{p.get_filename()}</a>'
+        out += '</div>'
 
         return out
 
