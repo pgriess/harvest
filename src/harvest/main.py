@@ -190,7 +190,7 @@ def web(args):
     app = Flask('harvest')
 
     @app.route("/")
-    def hello_world():
+    def root():
         folders = []
 
         for fn in os.listdir(args.directory):
