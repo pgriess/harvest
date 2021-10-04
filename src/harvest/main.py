@@ -250,7 +250,7 @@ def web(args):
         out += f'<a href="/{folder}/{uids[uid_idx - 1]}">Prev</a>'
         out += f'<a href="/{folder}/{uids[uid_idx + 1]}">Next</a>'
 
-        out += '<div style="display: flex">'
+        out += '<div style="display: flex; flex-wrap: wrap;">'
         for path, p in get_attachment_parts_and_paths(m).items():
             if p.get_content_maintype() == 'image':
                 out += f'<a href="/{quote_plus(folder)}/{uid}/{path}?disposition=attachment"><img src="/{quote_plus(folder)}/{uid}/{path}" style="width: 300px;"/><br/>{p.get_filename()}</a>'
