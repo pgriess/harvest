@@ -233,6 +233,10 @@ def web(args):
 
         fp = os.path.join(args.directory, folder_name_path(folder))
 
+        # Get the metadata
+        up = os.path.join(fp, str(uid))
+        meta_obj = read_metafile(os.path.join(up, 'meta.json'))
+
         # Parse the message
         bp = email.parser.BytesParser()
         with open(os.path.join(up, 'rfc822'), 'rb') as f:
@@ -242,12 +246,64 @@ def web(args):
         uids = sorted([int(fn) for fn in os.listdir(fp) if re.match(r'^\d+$', fn)])
         uid_idx = uids.index(uid)
 
-        out = ''
-        out += f'Date: {m["Date"]} <br/>'
-        out += f'From: {m["From"]} <br/>'
-        out += f'Subject: {m["Subject"]} <br/>'
+        out = f'''
+<html>
+    <head>
+        <script type="text/javascript">
+            const updateStatus = (status) => {{
+                const url ="/{folder}/{uid}/status";
+                var p = fetch(url, {{
+                    'method': 'PUT',
+                    'headers': {{
+                        'Content-Type': 'application/json',
+                    }},
+                    'body': JSON.stringify({{
+                        'status': status,
+                    }})
+                }})
+                .then((r) => {{
+                    return r.json();
+                }})
+                .then((jo) => {{
+                    var div = document.getElementById('statusDiv');
+                    div.classList.remove('delete', 'download', 'keep', 'unknown');
+                    div.classList.add(jo['status']);
+                    div.innerHTML = jo['status'];
+                }});
+            }};
+        </script>
+
+        <style type="text/css">
+            .delete {{
+                background-color: red;
+            }}
+
+            .download {{
+                background-color: yellow;
+            }}
+
+            .keep {{
+                background-color: green;
+            }}
+
+            .unknown {{
+                background-color: grey;
+            }}
+        </style>
+    </head>
+    <body>
+'''
+        status = meta_obj.get('status', 'unknown')
+        out += f'<div id="statusDiv" class="{status}">{status}</div>'
+
+        out += f'Date: {m["Date"]}<br/>'
+        out += f'From: <tt>{m["From"]}</tt><br/>'
+        out += f'Subject: {m["Subject"]}<br/>'
 
         out += f'<a href="/{folder}/{uids[uid_idx - 1]}">Prev</a>'
+        out += f'<button onclick="updateStatus(\'delete\');" class="delete">Delete</button>'
+        out += f'<button onclick="updateStatus(\'download\');" class="download">Download</button>'
+        out += f'<button onclick="updateStatus(\'keep\');" class="keep">Keep</button>'
         out += f'<a href="/{folder}/{uids[uid_idx + 1]}">Next</a>'
 
         out += '<div style="display: flex; flex-wrap: wrap;">'
@@ -258,7 +314,28 @@ def web(args):
                 out += f'<a href="/{quote_plus(folder)}/{uid}/{path}?disposition=attachment">{p.get_filename()}</a>'
         out += '</div>'
 
+        out += '''
+    </body>
+</html>
+'''
         return out
+
+    @app.route("/<path:folder>/<int:uid>/status", methods=['PUT'])
+    def status(folder, uid):
+        folder = unquote_plus(folder)
+
+        fp = os.path.join(args.directory, folder_name_path(folder))
+
+        # Get the metadata
+        mp = os.path.join(fp, str(uid), 'meta.json')
+        meta_obj = read_metafile(mp)
+
+        request_json = request.get_json()
+        if 'status' in request_json:
+            meta_obj['status'] = request_json['status']
+            write_metafile(mp, meta_obj)
+
+        return meta_obj
 
     @app.route("/<path:folder>/<int:uid>/<path>")
     def mime_part(folder, uid, path):
