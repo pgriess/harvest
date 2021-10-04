@@ -231,15 +231,24 @@ def web(args):
     def uid(folder, uid):
         folder = unquote_plus(folder)
 
-        p = email.parser.BytesParser()
-        fp = os.path.join(args.directory, folder_name_path(folder), str(uid), 'rfc822')
-        with open(fp, 'rb') as f:
-            m = p.parse(f)
+        fp = os.path.join(args.directory, folder_name_path(folder))
+
+        # Parse the message
+        bp = email.parser.BytesParser()
+        with open(os.path.join(up, 'rfc822'), 'rb') as f:
+            m = bp.parse(f)
+
+        # Compute the prev / next UIDs
+        uids = sorted([int(fn) for fn in os.listdir(fp) if re.match(r'^\d+$', fn)])
+        uid_idx = uids.index(uid)
 
         out = ''
         out += f'Date: {m["Date"]} <br/>'
         out += f'From: {m["From"]} <br/>'
         out += f'Subject: {m["Subject"]} <br/>'
+
+        out += f'<a href="/{folder}/{uids[uid_idx - 1]}">Prev</a>'
+        out += f'<a href="/{folder}/{uids[uid_idx + 1]}">Next</a>'
 
         out += '<div style="display: flex">'
         for path, p in get_attachment_parts_and_paths(m).items():
