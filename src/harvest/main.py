@@ -218,12 +218,40 @@ def web(args):
             if not os.path.isdir(os.path.join(fp, fn)):
                 continue
 
-            uids += [int(fn)]
+            meta_obj = read_metafile(os.path.join(fp, fn, 'meta.json'))
+            status = meta_obj.get('status', 'unknown')
 
-        out = '<ul>'
-        for u in sorted(uids):
-            out += f'  <li><a href="/{folder}/{u}">{u}</a></li>'
+            uids += [(int(fn), status)]
+
+        out = '''
+<html>
+    <head>
+        <style type="text/css">
+            .delete {
+                background-color: red;
+            }
+
+            .download {
+                background-color: yellow;
+            }
+
+            .keep {
+                background-color: green;
+            }
+        </style>
+    </head>
+    <body>
+'''
+
+        out += '<ul>'
+        for uid, status in sorted(uids):
+            out += f'  <li><a href="/{folder}/{uid}" class="{status}">{uid}</a></li>'
         out += '</ul>'
+
+        out += '''
+    </body>
+</html>
+'''
 
         return out
 
