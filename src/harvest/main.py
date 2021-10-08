@@ -223,6 +223,7 @@ def web(args):
         out = '''
 <html>
     <head>
+        <link rel="shortcut icon" href="about:blank">
         <style type="text/css">
             .delete {
                 background-color: red;
@@ -274,6 +275,7 @@ def web(args):
         out = f'''
 <html>
     <head>
+        <link rel="shortcut icon" href="about:blank">
         <script type="text/javascript">
             const updateStatus = (status) => {{
                 const url ="/{folder}/{uid}/status";
