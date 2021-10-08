@@ -1,10 +1,15 @@
 from argparse import ArgumentParser
+from datetime import datetime
+import email.generator
+import email.message
 import email.parser
+import email.policy
 from flask import Flask, make_response, request
 import getpass
 import imaplib
-import logging
+import io
 import json
+import logging
 import os
 import os.path
 import re
@@ -392,6 +397,98 @@ def web(args):
     app.run(debug=True)
 
 
+def push(args):
+    if args.p:
+        with open(args.p, 'r') as pf:
+            pw = pf.read().strip()
+    else:
+        pw = getpass.getpass(prompt=f'Password for {args.user}: ')
+
+    # TODO: Keep flags the same
+    with imaplib.IMAP4_SSL(host=args.server) as ic:
+        if args.verbosity > 2:
+            ic.debug = args.verbosity - 2
+
+        ic.login(args.user, pw)
+
+        # Walk list of server folders
+        typ, list_lines = ic.list()
+        assert typ == 'OK'
+        for list_line in map(lambda l: l.decode('utf-8'), list_lines):
+            m = re.match(r'^\((?P<attrs>(\\[a-zA-Z]+\s?)*)\)\s+"(?P<delim>[^"]+)"\s+"(?P<name>[^"]+)"$', list_line)
+            if not m:
+                logging.warning(f'skipping LIST response {f}')
+                continue
+
+            gd = m.groupdict()
+
+            folder_name = gd['name']
+            folder_attrs = set(re.split(r'\s+', gd['attrs']))
+
+            # Can't select this folder for some reason. Specified by the RFC.
+            if r'\Noselect' in folder_attrs:
+                continue
+
+            # The user has asked to run on a single folder; skip
+            if args.f and folder_name != args.f:
+                continue
+
+            logging.info(f'Beginning push for folder {folder_name}')
+
+            # Manually quote the folder name. The imaplib cllient doesn't do
+            # this by itself, for some reason. Whatever.
+            typ, _ = ic.select(f'"{folder_name}"')
+            assert typ =='OK'
+
+            folder_path = os.path.join(args.directory, folder_name_path(folder_name))
+
+            for fn in os.listdir(folder_path):
+                fp = os.path.join(folder_path, fn)
+                if not os.path.isdir(fp):
+                    continue
+
+                try:
+                    uid = int(fn)
+                except:
+                    logging.warning(f'Unexpected file {fn} found in folder')
+                    continue
+
+                # The user has asked to run on a single UID; skip
+                if args.u and args.u != uid:
+                    continue
+
+                meta_obj = read_metafile(os.path.join(fp, 'meta.json'))
+                status = meta_obj.get('status')
+
+                if status in ['delete', 'download']:
+                    logging.debug(f'Stripping {uid}')
+
+                    # Gmail deletion happens by moving to the special folder
+                    # "[Gmail]/Trash". We use the MOVE extension here rather
+                    # than COPY and appending the \Deleted flag.
+                    ic.uid('move', str(uid), '[Gmail]/Trash')
+
+                    message_path = os.path.join(folder_path, str(args.u), 'rfc822')
+                    bp = email.parser.BytesParser(policy=email.policy.default)
+                    with open(message_path, 'rb') as f:
+                        m = bp.parse(f)
+
+                    # By default, the APPEND command will mark the message's
+                    # timestamp with the current time. Instead, grab the date
+                    # from the message itself.
+                    dt = datetime.strptime(m.get('Date'), '%a, %d %b %Y %H:%M:%S %z')
+                    assert dt
+
+                    for p in get_attachment_parts_and_paths(m).values():
+                        p.clear_content()
+
+                    dataf = io.BytesIO()
+                    bg = email.generator.BytesGenerator(dataf)
+                    bg.flatten(m)
+
+                    ic.append(f'"{folder_name}"', r'(\Seen)', dt, dataf.getvalue())
+
+
 def main():
     ap = ArgumentParser(description='''
 Free up space on an email account by downloading attachments and deleting
@@ -416,6 +513,18 @@ messages.
 
     web_ap = sp.add_parser('web', help='run webserver')
 
+    push_ap = sp.add_parser('push', help='push changes to mail server')
+    push_ap.add_argument(
+        '-f', help='process only the specified folder')
+    push_ap.add_argument(
+        '-u', type=int, help='process only the given message UID')
+    push_ap.add_argument(
+        '-p', help='read the user password from the given file')
+    push_ap.add_argument(
+        'user', help='username to use when logging in to the mail server')
+    push_ap.add_argument(
+        'server', help='mail server to login to')
+
     args = ap.parse_args()
 
     logging.basicConfig(
@@ -426,3 +535,5 @@ messages.
         fetch(args)
     elif args.subcommand == 'web':
         web(args)
+    elif args.subcommand == 'push':
+        push(args)
