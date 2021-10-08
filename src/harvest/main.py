@@ -78,6 +78,7 @@ def fetch(args):
 
         ic.login(args.user, pw)
 
+        # Walk list of server folders
         typ, list_lines = ic.list()
         assert typ == 'OK'
         for list_line in map(lambda l: l.decode('utf-8'), list_lines):
@@ -95,7 +96,7 @@ def fetch(args):
             if r'\Noselect' in folder_attrs:
                 continue
 
-            logging.info(f'Beginning crawl of {folder_name}')
+            logging.info(f'Beginning fetch for folder {folder_name}')
 
             folder_path = os.path.join(args.directory, folder_name_path(folder_name))
             folder_meta_path = os.path.join(folder_path, 'meta.json')
