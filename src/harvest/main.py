@@ -42,10 +42,7 @@ def read_metafile(fp):
         with open(fp, 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
-        return {
-            'UIDVALIDITY': 0,
-            'UIDFETCHNEXT': 0,
-        }
+        return {}
 
 
 def write_metafile(fp, obj):
@@ -115,7 +112,7 @@ def fetch(args):
             # Handling UIDVALIDITY changes is way outside the scope of this
             # tool, and should be very rare anyway, as this indicates the
             # server's state has been corrupted.
-            assert meta_obj['UIDVALIDITY'] == uidvalidity or \
+            assert meta_obj.get('UIDVALIDITY') == uidvalidity or \
                     not os.path.exists(folder_path), \
                 'UIDVALIDITY changed on existing mail directory!'
 
@@ -125,7 +122,7 @@ def fetch(args):
                 meta_obj['NAME'] = folder_name
                 write_metafile(folder_meta_path, meta_obj)
 
-            if meta_obj['UIDFETCHNEXT'] >= uidnext:
+            if meta_obj.get('UIDFETCHNEXT', -1) >= uidnext:
                 logging.info('No new messages in folder; skipping')
                 continue
 
@@ -144,7 +141,7 @@ def fetch(args):
             # perform a potentially very expensive search only to find that we 
             # don't need to fetch much. This also means that we can avoid
             # culling already-seen UIDs manually.
-            typ, uids = ic.uid('search', 'UID', f'{meta_obj["UIDFETCHNEXT"]}:*', 'LARGER', str(1024 * 1024))
+            typ, uids = ic.uid('search', 'UID', f'{meta_obj.get("UIDFETCHNEXT", 1)}:*', 'LARGER', str(1024 * 1024))
             assert typ == 'OK'
             uids = uids[0].decode('utf-8')
 
