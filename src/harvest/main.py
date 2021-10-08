@@ -331,7 +331,7 @@ def web(args):
         out += f'<button onclick="updateStatus(\'delete\');" class="delete">Delete</button>'
         out += f'<button onclick="updateStatus(\'download\');" class="download">Download</button>'
         out += f'<button onclick="updateStatus(\'keep\');" class="keep">Keep</button>'
-        out += f'<a href="/{folder}/{uids[uid_idx + 1]}">Next</a>'
+        out += f'<a href="/{folder}/{uids[0 if uid_idx == len(uids) - 1 else uid_idx + 1]}">Next</a>'
 
         out += '<div style="display: flex; flex-wrap: wrap;">'
         for path, p in get_attachment_parts_and_paths(m).items():
