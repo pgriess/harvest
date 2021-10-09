@@ -503,6 +503,49 @@ def push(args):
                     ic.append(f'"{folder_name}"', r'(\Seen)', dt, dataf.getvalue())
 
 
+def copy(args):
+    for folder_name in os.listdir(args.directory):
+        folder_path = os.path.join(args.directory, folder_name)
+
+        if not os.path.isdir(folder_path):
+            continue
+
+        for uid in os.listdir(folder_path):
+            uid_path = os.path.join(folder_path, uid)
+
+            if not os.path.isdir(uid_path):
+                continue
+
+            meta_obj = read_metafile(os.path.join(uid_path, 'meta.json'))
+            if meta_obj.get('status') != 'download':
+                continue
+
+            logging.info(f'Downloading {folder_name}/{uid}')
+
+            message_path = os.path.join(uid_path, 'rfc822')
+            bp = email.parser.BytesParser(policy=email.policy.default)
+            with open(message_path, 'rb') as f:
+                m = bp.parse(f)
+
+            for p in get_attachment_parts_and_paths(m).values():
+                fn = p.get_filename()
+                assert fn
+
+                o = 1
+                while True:
+                    fp = os.path.join(args.copydir, fn)
+                    if not os.path.exists(fp):
+                        break
+
+                    base, ext = os.path.splitext(p.get_filename())
+                    fn = f'{base}({o}){ext}'
+                    o += 1
+
+                logging.debug(f'Saving {p.get_filename()} => {fp}')
+                with open(fp, 'wb') as of:
+                    of.write(p.get_payload(decode=True))
+
+
 def main():
     ap = ArgumentParser(description='''
 Free up space on an email account by downloading attachments and deleting
@@ -517,6 +560,9 @@ messages.
 
     sp = ap.add_subparsers(dest='subcommand')
 
+    fetch_ap = sp.add_parser('copy', help='fetch mail')
+    fetch_ap.add_argument('copydir', help='directory to place copied files in')
+
     fetch_ap = sp.add_parser('fetch', help='fetch mail')
     fetch_ap.add_argument(
         '-p', help='read the user password from the given file')
@@ -524,8 +570,6 @@ messages.
         'user', help='username to use when logging in to the mail server')
     fetch_ap.add_argument(
         'server', help='mail server to login to')
-
-    web_ap = sp.add_parser('web', help='run webserver')
 
     push_ap = sp.add_parser('push', help='push changes to mail server')
     push_ap.add_argument(
@@ -542,15 +586,19 @@ messages.
     push_ap.add_argument(
         'server', help='mail server to login to')
 
+    web_ap = sp.add_parser('web', help='run webserver')
+
     args = ap.parse_args()
 
     logging.basicConfig(
         style='{', format='{message}',
         stream=sys.stderr, level=logging.ERROR - args.verbosity * 10)
 
-    if args.subcommand == 'fetch':
+    if args.subcommand == 'copy':
+        copy(args)
+    elif args.subcommand == 'fetch':
         fetch(args)
-    elif args.subcommand == 'web':
-        web(args)
     elif args.subcommand == 'push':
         push(args)
+    elif args.subcommand == 'web':
+        web(args)
