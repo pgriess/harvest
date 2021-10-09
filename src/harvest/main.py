@@ -128,42 +128,36 @@ def fetch(args):
                 meta_obj['NAME'] = folder_name
                 write_metafile(folder_meta_path, meta_obj)
 
-            if meta_obj.get('UIDFETCHNEXT', -1) >= uidnext:
-                logging.info('No new messages in folder; skipping')
-                continue
-
             # Manually quote the folder name. The imaplib cllient doesn't do
             # this by itself, for some reason. Whatever.
             typ, _ = ic.select(f'"{folder_name}"', readonly=True)
             assert typ =='OK'
 
             # Find messages >1MB in size.
-            #
-            # If we don't find any, set UIDNEXT so that we know that we only
-            # care about new mail.
-            #
-            # Use the UID search key so that we constrain the search only to
-            # messages which we haven't fetched yet. Without this, we can
-            # perform a potentially very expensive search only to find that we 
-            # don't need to fetch much. This also means that we can avoid
-            # culling already-seen UIDs manually.
-            typ, uids = ic.uid('search', 'UID', f'{meta_obj.get("UIDFETCHNEXT", 1)}:*', 'LARGER', str(1024 * 1024))
+            typ, uids = ic.uid('search', 'UID', f'1:*', 'LARGER', str(1024 * 1024))
             assert typ == 'OK'
             uids = uids[0].decode('utf-8')
 
-            if not uids:
-                meta_obj['UIDFETCHNEXT'] = uidnext
-                write_metafile(folder_meta_path, meta_obj)
+            # We may get an empty string back; be careful and ensure that we always end up
+            # with a uids[] array even if it's empty
+            if uids:
+                uids = [int(u) for u in uids.split(' ')]
+            else:
+                uids = []
+
+            # Iterate over our local UIDs and cull any that no longer exist on
+            # the server
+            for luid in sorted([
+                    int(fn) for fn in os.listdir(folder_path)
+                        if re.match(r'^\d+$', fn)]):
+                if luid in uids:
                 continue
 
-            uids = [int(u) for u in uids.split(' ')]
-            if not uids:
-                meta_obj['UIDFETCHNEXT'] = uidnext
-                write_metafile(folder_meta_path, meta_obj)
-                continue
+                logging.debug(f'Deleting stale local UID {luid}')
+                shutil.rmtree(os.path.join(folder_path, str(luid)))
 
             # Fetch all of the messages and keep UIDFETCHNEXT up to date
-            for index, uid in enumerate(uids):
+            for index, uid in enumerate([u for u in uids if u > meta_obj.get('UIDFETCHNEXT', 0)]):
                 logging.debug(f'Fetching message {index + 1}/{len(uids)}')
 
                 typ, data = ic.uid('fetch', str(uid), '(RFC822)')
@@ -177,7 +171,9 @@ def fetch(args):
                     continue
 
                 msg_dir_path = os.path.join(folder_path, str(uid))
-                os.makedirs(msg_dir_path, exist_ok=True)
+                assert not os.path.isdir(msg_dir_path)
+                os.makedirs(msg_dir_path)
+
                 with open(os.path.join(msg_dir_path, 'rfc822'), 'wb') as f:
                     f.write(data[0][1])
 
