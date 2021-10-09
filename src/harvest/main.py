@@ -466,6 +466,7 @@ def push(args):
                     # Gmail deletion happens by moving to the special folder
                     # "[Gmail]/Trash". We use the MOVE extension here rather
                     # than COPY and appending the \Deleted flag.
+                    if not args.dry_run:
                     ic.uid('move', str(uid), '[Gmail]/Trash')
 
                     message_path = os.path.join(folder_path, str(uid), 'rfc822')
@@ -486,6 +487,7 @@ def push(args):
                     bg = email.generator.BytesGenerator(dataf)
                     bg.flatten(m)
 
+                    if not args.dry_run:
                     ic.append(f'"{folder_name}"', r'(\Seen)', dt, dataf.getvalue())
 
 
@@ -520,6 +522,9 @@ messages.
         '-u', type=int, help='process only the given message UID')
     push_ap.add_argument(
         '-p', help='read the user password from the given file')
+    push_ap.add_argument(
+        '-n', dest='dry_run', action='store_true', default=False,
+        help='dry run')
     push_ap.add_argument(
         'user', help='username to use when logging in to the mail server')
     push_ap.add_argument(
