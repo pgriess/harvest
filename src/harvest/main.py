@@ -460,6 +460,18 @@ def push(args):
                 meta_obj = read_metafile(os.path.join(fp, 'meta.json'))
                 status = meta_obj.get('status')
 
+                # Check if the message still exists
+                #
+                # Only do this if we have a real status, as this is expensive to
+                # do and makes iteration slower if we weren't going to do
+                # anything anyway.
+                if status is not None and not args.dry_run:
+                    typ, data = ic.uid('fetch', str(uid), 'FAST')
+                    assert typ == 'OK'
+                    if data == [None]:
+                        logging.info(f'Skipping UID {uid} which has dissappeared')
+                        continue
+
                 if status in ['delete', 'download']:
                     logging.debug(f'Stripping {uid}')
 
