@@ -13,6 +13,7 @@ import logging
 import os
 import os.path
 import re
+import shutil
 import sys
 from tempfile import mkstemp
 from urllib.parse import quote_plus, unquote_plus
@@ -101,7 +102,7 @@ def fetch(args):
             if r'\Noselect' in folder_attrs:
                 continue
 
-            logging.info(f'Beginning fetch for folder {folder_name}')
+            logging.info(f'Fetching messages for folder {folder_name}')
 
             folder_path = os.path.join(args.directory, folder_name_path(folder_name))
             folder_meta_path = os.path.join(folder_path, 'meta.json')
@@ -151,7 +152,7 @@ def fetch(args):
                     int(fn) for fn in os.listdir(folder_path)
                         if re.match(r'^\d+$', fn)]):
                 if luid in uids:
-                continue
+                    continue
 
                 logging.debug(f'Deleting stale local UID {luid}')
                 shutil.rmtree(os.path.join(folder_path, str(luid)))
@@ -438,15 +439,12 @@ def push(args):
 
             folder_path = os.path.join(args.directory, folder_name_path(folder_name))
 
-            for fn in os.listdir(folder_path):
-                fp = os.path.join(folder_path, fn)
+            # Process UIDs in order so that it's easier to understand the logs
+            for uid in sorted([
+                    int(fn) for fn in os.listdir(folder_path)
+                        if re.match(r'^\d+$', fn)]):
+                fp = os.path.join(folder_path, str(uid))
                 if not os.path.isdir(fp):
-                    continue
-
-                try:
-                    uid = int(fn)
-                except:
-                    logging.warning(f'Unexpected file {fn} found in folder')
                     continue
 
                 # The user has asked to run on a single UID; skip
@@ -475,7 +473,7 @@ def push(args):
                     # "[Gmail]/Trash". We use the MOVE extension here rather
                     # than COPY and appending the \Deleted flag.
                     if not args.dry_run:
-                    ic.uid('move', str(uid), '[Gmail]/Trash')
+                        ic.uid('move', str(uid), '[Gmail]/Trash')
 
                     message_path = os.path.join(folder_path, str(uid), 'rfc822')
                     bp = email.parser.BytesParser(policy=email.policy.default)
@@ -489,6 +487,7 @@ def push(args):
                     assert dt
 
                     for p in get_attachment_parts_and_paths(m).values():
+                        logging.debug(f'Clearing {len(p.get_payload(decode=True))} byte attachment')
                         p.clear_content()
 
                     dataf = io.BytesIO()
@@ -496,7 +495,7 @@ def push(args):
                     bg.flatten(m)
 
                     if not args.dry_run:
-                    ic.append(f'"{folder_name}"', r'(\Seen)', dt, dataf.getvalue())
+                        ic.append(f'"{folder_name}"', r'(\Seen)', dt, dataf.getvalue())
 
 
 def copy(args):
