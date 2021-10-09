@@ -468,7 +468,7 @@ def push(args):
                     # than COPY and appending the \Deleted flag.
                     ic.uid('move', str(uid), '[Gmail]/Trash')
 
-                    message_path = os.path.join(folder_path, str(args.u), 'rfc822')
+                    message_path = os.path.join(folder_path, str(uid), 'rfc822')
                     bp = email.parser.BytesParser(policy=email.policy.default)
                     with open(message_path, 'rb') as f:
                         m = bp.parse(f)
