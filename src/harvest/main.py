@@ -19,9 +19,17 @@ from tempfile import mkstemp
 from urllib.parse import quote_plus, unquote_plus
 
 
+# NOTE: The paths here are only interpreted by this program. We do NOT need to
+#       ensure that they are any sort of valid RFC822, IMAP, whatever
+#       construction. Just be self-consistent.
 def get_attachment_parts_and_paths(m, mime_prefix=None):
     attachments = {}
-    for i, p in enumerate(m.get_payload()):
+
+    parts = [m]
+    if m.is_multipart():
+        parts = m.get_payload()
+
+    for i, p in enumerate(parts):
         if mime_prefix is None:
             mime_path = str(i + 1)
         else:
@@ -37,6 +45,29 @@ def get_attachment_parts_and_paths(m, mime_prefix=None):
         attachments.update(get_attachment_parts_and_paths(p, mime_path))
 
     return attachments
+
+
+def part_is_inline_image(p):
+    '''
+    Should the given part be shown as an inline image?
+    '''
+
+    if p.get_content_maintype() == 'image':
+        return True
+
+    if not p.get_filename():
+        return False
+
+    _, ext = os.path.splitext(p.get_filename())
+
+    if not ext:
+        return False
+
+    ext = ext.lstrip('.').lower()
+    if ext in ['jpg', 'jpeg', 'gif', 'png', 'bmp']:
+        return True
+
+    return False
 
 
 def folder_name_path(fn):
@@ -338,7 +369,7 @@ def web(args):
 
         out += '<div style="display: flex; flex-wrap: wrap;">'
         for path, p in get_attachment_parts_and_paths(m).items():
-            if p.get_content_maintype() == 'image':
+            if part_is_inline_image(p):
                 out += f'<a href="/{quote_plus(folder)}/{uid}/{path}?disposition=attachment"><img src="/{quote_plus(folder)}/{uid}/{path}" style="width: 300px;"/><br/>{p.get_filename()}</a>'
             else:
                 out += f'<a href="/{quote_plus(folder)}/{uid}/{path}?disposition=attachment">{p.get_filename()}</a>'
@@ -388,7 +419,6 @@ def web(args):
             if p.get_filename():
                 resp.headers['Content-Disposition'] += f'; filename="{p.get_filename()}"'
 
-        print(f'{resp.headers}')
         return resp
 
     app.run(debug=True)
@@ -515,7 +545,7 @@ def copy(args):
             if meta_obj.get('status') != 'download':
                 continue
 
-            logging.info(f'Downloading {folder_name}/{uid}')
+            logging.info(f'Copying {folder_name}/{uid}')
 
             message_path = os.path.join(uid_path, 'rfc822')
             bp = email.parser.BytesParser(policy=email.policy.default)
@@ -555,7 +585,7 @@ messages.
 
     sp = ap.add_subparsers(dest='subcommand')
 
-    fetch_ap = sp.add_parser('copy', help='fetch mail')
+    fetch_ap = sp.add_parser('copy', help='copy mail')
     fetch_ap.add_argument('copydir', help='directory to place copied files in')
 
     fetch_ap = sp.add_parser('fetch', help='fetch mail')
